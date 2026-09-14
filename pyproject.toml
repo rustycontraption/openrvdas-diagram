@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openrvdas-diagram"
+version = "0.1.0"
+description = "Generates a data-flow diagram from OpenRVDAS logger configs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    "pyyaml",
+]
+
+[project.scripts]
+openrvdas-diagram = "openrvdas_diagram.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
