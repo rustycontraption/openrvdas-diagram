@@ -1,7 +1,9 @@
 import colorsys
 import xml.etree.ElementTree as ET
 
-from openrvdas_diagram.logger_inventory_builder import Logger, LoggerInventory, Reader, Transform, Writer
+# TODO: Figure out how to handle loggers that connect to each other
+# TODO: Figure out how to show logger writers that go to a deadend
+# TODO: Figure out how to show logger FileWriters (maybe noted in the logger node?)
 
 '''
 Assumptions:
@@ -15,6 +17,13 @@ XSI_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance"
 YFILES_NAMESPACE = "http://www.yworks.com/xml/graphml"
 
 ET.register_namespace("y", YFILES_NAMESPACE)
+
+GRAPHML_FORMAT_YED = "yed"
+GRAPHML_FORMAT_GENERIC = "generic"
+SUPPORTED_GRAPHML_FORMATS = (GRAPHML_FORMAT_YED, GRAPHML_FORMAT_GENERIC)
+
+YED_SCHEMA_LOCATION = "http://www.yworks.com/xml/schema/graphml/1.1/ygraphml.xsd"
+GENERIC_SCHEMA_LOCATION = "http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"
 
 GROUP_COLOR_LIGHTNESS = 0.90
 GROUP_COLOR_SATURATION = 0.45
@@ -48,6 +57,7 @@ def generate_group_color(group_index):
     return f"#{round(red * 255):02X}{round(green * 255):02X}{round(blue * 255):02X}"
 
 openrvdas_remote_writer_classes = {
+    #TODO: add default behavior to handle openrvdas classes that arent listed here
     "CachedDataWriter": "data_server",
     "DatabaseWriter": "host",
     "EmailWriter": "to",
@@ -71,6 +81,7 @@ openrvdas_remote_writer_classes = {
 }
 
 openrvdas_local_writer_classes = {
+    #TODO: add default behavior to handle openrvdas classes that arent listed here
     "FileWriter",
     "TextFileWriter",
     "LogfileWriter",
@@ -79,11 +90,23 @@ openrvdas_local_writer_classes = {
 }
 
 class GraphmlBuilder:
-    """Builds a yEd-compatible GraphML data-flow diagram from the logger
-    inventory returned by LoggerInventoryBuilder."""
+    """Builds a GraphML data-flow diagram from the logger inventory returned by
+    LoggerInventoryBuilder.
 
-    def __init__(self, inventory):
+    graphml_format selects who the output is compatible with:
+        - "yed": styled nodes nested inside yEd group nodes.
+        - "generic": standard GraphML only.  Nodes are flat and unstyled, and
+          describe themselves with label, kind and group data attributes.
+    """
+
+    def __init__(self, inventory, graphml_format=GRAPHML_FORMAT_YED):
+        if graphml_format not in SUPPORTED_GRAPHML_FORMATS:
+            raise ValueError(
+                f"unknown graphml format: {graphml_format!r}, expected one of {SUPPORTED_GRAPHML_FORMATS}"
+            )
+
         self.inventory = inventory
+        self.graphml_format = graphml_format
 
         self.nodes = {
             "sources": set(),
@@ -136,6 +159,7 @@ class GraphmlBuilder:
     def _loggers_are_linked(yaml_file_2, logger_1, logger_2):
         """True if a writer in logger_1 sends to logger_2's yaml file, on a port
         logger_2 also reads from."""
+        #TODO: handle N number of loggers instead of logger_1 and logger_2
         for writer in logger_1.writers:
             if writer.kwargs.get("destination") != yaml_file_2:
                 continue
@@ -167,9 +191,12 @@ class GraphmlBuilder:
             return self._logger_node_id(yaml_file, logger_name), self._destination_node_id(to_id)
         raise ValueError(f"unknown edge kind: {kind!r}")
 
+    @property
+    def _is_yed_format(self):
+        return self.graphml_format == GRAPHML_FORMAT_YED
+
     @staticmethod
-    def _generate_node_xml(graph, node_id, label, shape):
-        node = ET.SubElement(graph, "node", {"id": node_id})
+    def _add_yed_node_graphics(node, label, shape):
         data = ET.SubElement(node, "data", {"key": "node_graphics"})
         shape_node = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}ShapeNode")
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}Geometry", {"width": str(estimate_node_width(label)), "height": str(NODE_HEIGHT_PX)})
@@ -178,7 +205,20 @@ class GraphmlBuilder:
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}NodeLabel", {"autoSizePolicy": "content"}).text = label
 
     @staticmethod
-    def _generate_group_node_xml(graph, group_id, label, fill_color):
+    def _add_generic_node_data(node, label, kind, group_label):
+        ET.SubElement(node, "data", {"key": "label"}).text = label
+        ET.SubElement(node, "data", {"key": "kind"}).text = kind
+        ET.SubElement(node, "data", {"key": "group"}).text = group_label
+
+    def _generate_node_xml(self, graph, node_id, label, shape, kind, group_label):
+        node = ET.SubElement(graph, "node", {"id": node_id})
+        if self._is_yed_format:
+            self._add_yed_node_graphics(node, label, shape)
+        else:
+            self._add_generic_node_data(node, label, kind, group_label)
+
+    @staticmethod
+    def _generate_yed_group_node_xml(graph, group_id, label, fill_color):
         group_node = ET.SubElement(graph, "node", {"id": group_id, "yfiles.foldertype": "group"})
         data = ET.SubElement(group_node, "data", {"key": "node_graphics"})
         proxy = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}ProxyAutoBoundsNode")
@@ -191,46 +231,81 @@ class GraphmlBuilder:
         ET.SubElement(group_node_element, f"{{{YFILES_NAMESPACE}}}State", {"closed": "false", "innerGraphDisplayEnabled": "false"})
         return ET.SubElement(group_node, "graph", {"id": group_id, "edgedefault": "directed"})
 
+    def _generate_group_node_xml(self, graph, group_id, label, fill_color):
+        """
+        Returns the graph element that the group's member nodes belong in.
+
+        Generic GraphML readers commonly drop nested graphs, so the generic format
+        keeps members in the parent graph and records the group on each node instead.
+        """
+        if self._is_yed_format:
+            return self._generate_yed_group_node_xml(graph, group_id, label, fill_color)
+        return graph
+
     def _add_node_elements(self, graph):
         group_index = 0
 
-        sources_graph = self._generate_group_node_xml(graph, "group_sources", "sources", generate_group_color(group_index))
+        sources_group_label = "sources"
+        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, generate_group_color(group_index))
         group_index += 1
         for source_name in self.nodes["sources"]:
             self._generate_node_xml(
-                sources_graph, 
-                self._source_node_id(source_name), 
-                source_name, 
-                "roundrectangle"
+                sources_graph,
+                self._source_node_id(source_name),
+                source_name,
+                "roundrectangle",
+                "source",
+                sources_group_label,
             )
 
         for yaml_file, logger_definitions in self.nodes["loggers"].items():
             loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, generate_group_color(group_index))
             group_index += 1
             for logger_name in logger_definitions:
-                self._generate_node_xml(loggers_graph, self._logger_node_id(yaml_file, logger_name), logger_name, "roundrectangle")
+                self._generate_node_xml(loggers_graph, self._logger_node_id(yaml_file, logger_name), logger_name, "roundrectangle", "logger", yaml_file)
 
-        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", "destinations", generate_group_color(group_index))
+        destinations_group_label = "destinations"
+        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, generate_group_color(group_index))
         group_index += 1
         for destination_value in self.nodes["destinations"]:
-            self._generate_node_xml(destinations_graph, self._destination_node_id(destination_value), destination_value, "roundrectangle")
+            self._generate_node_xml(destinations_graph, self._destination_node_id(destination_value), destination_value, "roundrectangle", "destination", destinations_group_label)
+
+    @staticmethod
+    def _add_yed_edge_graphics(edge):
+        data = ET.SubElement(edge, "data", {"key": "edge_graphics"})
+        polyline_edge = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}PolyLineEdge")
+        ET.SubElement(polyline_edge, f"{{{YFILES_NAMESPACE}}}Arrows", {"source": "none", "target": "standard"})
+
+    @staticmethod
+    def _add_generic_edge_data(edge, kind):
+        ET.SubElement(edge, "data", {"key": "edge_kind"}).text = kind
 
     def _add_edge_elements(self, graph):
         for edge_index, (from_id, to_id, kind) in enumerate(self.edges):
             source_id, target_id = self._edge_endpoint_ids(from_id, to_id, kind)
             edge = ET.SubElement(graph, "edge", {"id": f"e{edge_index}", "source": source_id, "target": target_id})
-            data = ET.SubElement(edge, "data", {"key": "edge_graphics"})
-            polyline_edge = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}PolyLineEdge")
-            ET.SubElement(polyline_edge, f"{{{YFILES_NAMESPACE}}}Arrows", {"source": "none", "target": "standard"})
+            if self._is_yed_format:
+                self._add_yed_edge_graphics(edge)
+            else:
+                self._add_generic_edge_data(edge, kind)
+
+    def _add_key_elements(self, root):
+        if self._is_yed_format:
+            ET.SubElement(root, "key", {"for": "node", "id": "node_graphics", "yfiles.type": "nodegraphics"})
+            ET.SubElement(root, "key", {"for": "edge", "id": "edge_graphics", "yfiles.type": "edgegraphics"})
+            return
+        for node_attribute_name in ("label", "kind", "group"):
+            ET.SubElement(root, "key", {"for": "node", "id": node_attribute_name, "attr.name": node_attribute_name, "attr.type": "string"})
+        ET.SubElement(root, "key", {"for": "edge", "id": "edge_kind", "attr.name": "kind", "attr.type": "string"})
 
     def _build_root_element(self):
+        schema_location = YED_SCHEMA_LOCATION if self._is_yed_format else GENERIC_SCHEMA_LOCATION
         root = ET.Element("graphml", {
             "xmlns": GRAPHML_NAMESPACE,
             "xmlns:xsi": XSI_NAMESPACE,
-            "xsi:schemaLocation": f"{GRAPHML_NAMESPACE} http://www.yworks.com/xml/schema/graphml/1.1/ygraphml.xsd",
+            "xsi:schemaLocation": f"{GRAPHML_NAMESPACE} {schema_location}",
         })
-        ET.SubElement(root, "key", {"for": "node", "id": "node_graphics", "yfiles.type": "nodegraphics"})
-        ET.SubElement(root, "key", {"for": "edge", "id": "edge_graphics", "yfiles.type": "edgegraphics"})
+        self._add_key_elements(root)
         graph = ET.SubElement(root, "graph", {"id": "G", "edgedefault": "directed"})
 
         self._add_node_elements(graph)
