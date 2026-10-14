@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from openrvdas_diagram.errors import InvalidYamlError, MissingTemplateFileError, UnknownLoggerTemplateError
+
 PLACEHOLDER_PATTERN = re.compile(r"<<([^<>]+)>>")
 
 
@@ -49,12 +51,21 @@ class LoggerInventory(dict):
 class LoggerInventoryBuilder:
     def _load_yaml(self, path):
         with open(path) as file:
-            return yaml.safe_load(file)
+            try:
+                return yaml.safe_load(file)
+            except yaml.YAMLError as error:
+                problem_mark = getattr(error, "problem_mark", None)
+                line = problem_mark.line + 1 if problem_mark else None
+                raise InvalidYamlError(Path(path).name, line) from error
 
-    def _load_templates(self, templates, template_dir):
+    def _load_templates(self, templates, template_dir, config_path):
         logger_templates = {}
         for template in templates:
-            data = self._load_yaml(template_dir / Path(template).name)
+            template_name = Path(template).name
+            try:
+                data = self._load_yaml(template_dir / template_name)
+            except FileNotFoundError as error:
+                raise MissingTemplateFileError(config_path.name, template_name) from error
             logger_templates.update(data.get("logger_templates", {}))
         return logger_templates
 
@@ -112,9 +123,12 @@ class LoggerInventoryBuilder:
                 return config
         return {}
 
-    def _resolve_logger_config(self, definition, templates, inline_configs):
+    def _resolve_logger_config(self, logger_name, definition, templates, inline_configs, config_path):
         if "logger_template" in definition:
-            template = templates[definition["logger_template"]]
+            template_name = definition["logger_template"]
+            if template_name not in templates:
+                raise UnknownLoggerTemplateError(config_path.name, logger_name, template_name)
+            template = templates[template_name]
             variables = definition.get("variables", {}) or {}
             configs = template.get("configs", {}) or {}
             config = self._filter_active_configs(configs, [config_name for config_name in configs if config_name != "off"])
@@ -134,10 +148,10 @@ class LoggerInventoryBuilder:
         inventory = LoggerInventory()
         for path in self._find_config_files(config_dir):
             data = self._load_yaml(path)
-            templates = self._load_templates(data.get("includes", []) or [], template_dir)
+            templates = self._load_templates(data.get("includes", []) or [], template_dir, path)
             inline_configs = data.get("configs", {}) or {}
             for name, definition in (data.get("loggers", {}) or {}).items():
-                config = self._resolve_logger_config(definition, templates, inline_configs)
+                config = self._resolve_logger_config(name, definition, templates, inline_configs, path)
                 readers = self._parse_readers(config.get("readers"))
                 if not readers:
                     continue
