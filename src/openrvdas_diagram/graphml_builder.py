@@ -1,9 +1,12 @@
-import colorsys
 import xml.etree.ElementTree as ET
+
+from openrvdas_diagram.color_schemes import CLASSIC
 
 # TODO: Figure out how to handle loggers that connect to each other
 # TODO: Figure out how to show logger writers that go to a deadend
 # TODO: Figure out how to show logger FileWriters (maybe noted in the logger node?)
+# TODO: Color schemes are imported here only to support yEd output.  Maybe we should let
+#       yEd handle the coloring so we can move colors out of the builder?
 
 '''
 Assumptions:
@@ -25,10 +28,6 @@ SUPPORTED_GRAPHML_FORMATS = (GRAPHML_FORMAT_YED, GRAPHML_FORMAT_GENERIC)
 YED_SCHEMA_LOCATION = "http://www.yworks.com/xml/schema/graphml/1.1/ygraphml.xsd"
 GENERIC_SCHEMA_LOCATION = "http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"
 
-GROUP_COLOR_LIGHTNESS = 0.90
-GROUP_COLOR_SATURATION = 0.45
-GOLDEN_RATIO_CONJUGATE = 0.618033988749895
-
 NODE_HEIGHT_PX = 50
 NODE_MIN_WIDTH_PX = 80
 NODE_LABEL_CHAR_WIDTH_PX = 8
@@ -43,18 +42,6 @@ def estimate_node_width(label):
     """
     return max(NODE_MIN_WIDTH_PX, len(label) * NODE_LABEL_CHAR_WIDTH_PX)
 
-
-def generate_group_color(group_index):
-    """
-    Returns a light/pastel hex color for the given group index.
-
-    Hues step around the color wheel by the golden ratio conjugate, which spreads
-    any number of hues evenly with no two ever landing close together.
-    #TODO: Use only colorblind safe colors
-    """
-    hue = (group_index * GOLDEN_RATIO_CONJUGATE) % 1.0
-    red, green, blue = colorsys.hls_to_rgb(hue, GROUP_COLOR_LIGHTNESS, GROUP_COLOR_SATURATION)
-    return f"#{round(red * 255):02X}{round(green * 255):02X}{round(blue * 255):02X}"
 
 openrvdas_remote_writer_classes = {
     #TODO: add default behavior to handle openrvdas classes that arent listed here
@@ -97,6 +84,9 @@ class GraphmlBuilder:
         - "yed": styled nodes nested inside yEd group nodes.
         - "generic": standard GraphML only.  Nodes are flat and unstyled, and
           describe themselves with label, kind and group data attributes.
+
+    The yEd output always uses the classic colors; color schemes are chosen when
+    rendering generic GraphML with GraphmlRenderer.
     """
 
     def __init__(self, inventory, graphml_format=GRAPHML_FORMAT_YED):
@@ -201,7 +191,7 @@ class GraphmlBuilder:
         shape_node = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}ShapeNode")
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}Geometry", {"width": str(estimate_node_width(label)), "height": str(NODE_HEIGHT_PX)})
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}Shape", {"type": shape})
-        ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}BorderStyle", {"type": "line", "width": "1.0", "color": "#000000"})
+        ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}BorderStyle", {"type": "line", "width": "1.0", "color": CLASSIC.default_node_border_color})
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}NodeLabel", {"autoSizePolicy": "content"}).text = label
 
     @staticmethod
@@ -246,7 +236,7 @@ class GraphmlBuilder:
         group_index = 0
 
         sources_group_label = "sources"
-        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, generate_group_color(group_index))
+        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, CLASSIC.group_fill_color(group_index))
         group_index += 1
         for source_name in self.nodes["sources"]:
             self._generate_node_xml(
@@ -259,13 +249,13 @@ class GraphmlBuilder:
             )
 
         for yaml_file, logger_definitions in self.nodes["loggers"].items():
-            loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, generate_group_color(group_index))
+            loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, CLASSIC.group_fill_color(group_index))
             group_index += 1
             for logger_name in logger_definitions:
                 self._generate_node_xml(loggers_graph, self._logger_node_id(yaml_file, logger_name), logger_name, "roundrectangle", "logger", yaml_file)
 
         destinations_group_label = "destinations"
-        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, generate_group_color(group_index))
+        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, CLASSIC.group_fill_color(group_index))
         group_index += 1
         for destination_value in self.nodes["destinations"]:
             self._generate_node_xml(destinations_graph, self._destination_node_id(destination_value), destination_value, "roundrectangle", "destination", destinations_group_label)

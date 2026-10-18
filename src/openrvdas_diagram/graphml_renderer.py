@@ -1,16 +1,17 @@
-import colorsys
 import html
 import json
 import xml.etree.ElementTree as ET
 
 import graphviz
 
-from openrvdas_diagram.graphml_builder import GRAPHML_NAMESPACE, generate_group_color
+from openrvdas_diagram.color_schemes import CLASSIC
+from openrvdas_diagram.graphml_builder import GRAPHML_NAMESPACE
 
 '''
 Assumptions:
     - The GraphML was written by GraphmlBuilder in the generic format
     - Nodes with the same group value belong in the same group box
+    - All colors come from the ColorScheme passed in (classic by default)
     - Groups are colored in the order they first appear, which matches the yEd output
     - An edge is identified by eye from its color, which it shares with the source it
       leaves or the destination it arrives at
@@ -28,45 +29,26 @@ EDGE_ROUTING = "spline"
 FONT_NAME = "Helvetica"
 # Nodes are drawn by their HTML table label, so the Graphviz shape itself is invisible
 NODE_SHAPE = "plain"
-NODE_FILL_COLOR = "#FFFFFF"
-NODE_BORDER_COLOR = "#000000"
 NODE_BORDER_WIDTH = "1"
 NODE_LABEL_PADDING_POINTS = "8"
 EDGE_PORT_SPACING_POINTS = "7"
 GROUP_STYLE = "rounded,filled"
 EDGE_ARROWHEAD = "normal"
 EDGE_LINE_WIDTH = "1.5"
-EDGE_DEFAULT_COLOR = "#555555"
 # Edges leave and enter on the sides that face the next layer for RANK_DIRECTION
 EDGE_TAIL_SIDE = "e"
 EDGE_HEAD_SIDE = "w"
 
 COLORED_NODE_BORDER_WIDTH = "3"
-EDGE_COLOR_LIGHTNESS = 0.40
-EDGE_COLOR_SATURATION = 0.85
-GOLDEN_RATIO_CONJUGATE = 0.618033988749895
-
-
-def generate_edge_color(color_index):
-    """
-    Returns a strong hex color for the given index, dark enough to read as a
-    line on a white background.
-
-    Hues step around the color wheel by the golden ratio conjugate, so nodes
-    that sit next to each other get clearly different colors.
-    #TODO: Use only colorblind safe colors
-    """
-    hue = (color_index * GOLDEN_RATIO_CONJUGATE) % 1.0
-    red, green, blue = colorsys.hls_to_rgb(hue, EDGE_COLOR_LIGHTNESS, EDGE_COLOR_SATURATION)
-    return f"#{round(red * 255):02X}{round(green * 255):02X}{round(blue * 255):02X}"
 
 
 class GraphmlRenderer:
     """Renders the generic GraphML written by GraphmlBuilder as a PNG, laid out
-    in layers with Graphviz dot."""
+    in layers with Graphviz dot, in the colors of color_scheme."""
 
-    def __init__(self, graphml_text):
+    def __init__(self, graphml_text, color_scheme=CLASSIC):
         self.root = ET.fromstring(graphml_text)
+        self.color_scheme = color_scheme
 
         self.nodes = []
         self.edges = []
@@ -125,7 +107,10 @@ class GraphmlRenderer:
 
     def _node_colors(self):
         colored_nodes = [node for node in self.nodes if node["kind"] in COLORED_NODE_KINDS]
-        return {node["id"]: generate_edge_color(color_index) for color_index, node in enumerate(colored_nodes)}
+        return {
+            node["id"]: self.color_scheme.node_color(colored_node_index)
+            for colored_node_index, node in enumerate(colored_nodes)
+        }
 
     def _declared_node_order(self):
         return {node["id"]: node_index for node_index, node in enumerate(self.nodes)}
@@ -170,7 +155,7 @@ class GraphmlRenderer:
         one side and a column of outgoing edge ports down the other.
         """
         return (
-            f'<<TABLE BORDER="{border_width}" COLOR="{border_color}" BGCOLOR="{NODE_FILL_COLOR}" STYLE="ROUNDED" '
+            f'<<TABLE BORDER="{border_width}" COLOR="{border_color}" BGCOLOR="{self.color_scheme.node_fill_color}" STYLE="ROUNDED" '
             f'CELLBORDER="0" CELLSPACING="0" CELLPADDING="0"><TR>'
             f'{self._port_column_html("in", incoming_port_count)}'
             f'<TD CELLPADDING="{NODE_LABEL_PADDING_POINTS}">{html.escape(label)}</TD>'
@@ -188,24 +173,34 @@ class GraphmlRenderer:
             outgoing_port_counts[source_id] = outgoing_port_counts.get(source_id, 0) + 1
             incoming_port_counts[target_id] = incoming_port_counts.get(target_id, 0) + 1
 
+        color_scheme = self.color_scheme
+        graph_attributes = {
+            "rankdir": RANK_DIRECTION,
+            "ranksep": RANK_SEPARATION_INCHES,
+            "nodesep": NODE_SEPARATION_INCHES,
+            "splines": EDGE_ROUTING,
+            "fontname": FONT_NAME,
+        }
+        node_attributes = {"shape": NODE_SHAPE, "fontname": FONT_NAME}
+        # Left unset when the scheme has no preference, so Graphviz uses its defaults
+        if color_scheme.text_color:
+            graph_attributes["fontcolor"] = color_scheme.text_color
+            node_attributes["fontcolor"] = color_scheme.text_color
+        if color_scheme.background_color:
+            graph_attributes["bgcolor"] = color_scheme.background_color
+
         digraph = graphviz.Digraph(
-            graph_attr={
-                "rankdir": RANK_DIRECTION,
-                "ranksep": RANK_SEPARATION_INCHES,
-                "nodesep": NODE_SEPARATION_INCHES,
-                "splines": EDGE_ROUTING,
-                "fontname": FONT_NAME,
-            },
-            node_attr={"shape": NODE_SHAPE, "fontname": FONT_NAME},
+            graph_attr=graph_attributes,
+            node_attr=node_attributes,
             edge_attr={
                 "arrowhead": EDGE_ARROWHEAD,
                 "penwidth": EDGE_LINE_WIDTH,
-                "color": EDGE_DEFAULT_COLOR,
+                "color": color_scheme.default_edge_color,
             },
         )
 
         for group_index, (group_label, group_nodes) in enumerate(self._nodes_by_group().items()):
-            group_color = generate_group_color(group_index)
+            group_color = color_scheme.group_fill_color(group_index)
             with digraph.subgraph(name=f"cluster_{group_index}") as group_cluster:
                 group_cluster.attr(label=group_label, style=GROUP_STYLE, fillcolor=group_color, color=group_color)
                 for node in group_nodes:
@@ -216,13 +211,13 @@ class GraphmlRenderer:
                             node["label"],
                             incoming_port_counts.get(node["id"], 0),
                             outgoing_port_counts.get(node["id"], 0),
-                            node_colors[node["id"]] if is_colored else NODE_BORDER_COLOR,
+                            node_colors[node["id"]] if is_colored else color_scheme.default_node_border_color,
                             COLORED_NODE_BORDER_WIDTH if is_colored else NODE_BORDER_WIDTH,
                         ),
                     )
 
         for (source_id, target_id), (tail_port_index, head_port_index) in zip(self.edges, edge_port_indexes):
-            edge_color = node_colors.get(source_id) or node_colors.get(target_id) or EDGE_DEFAULT_COLOR
+            edge_color = node_colors.get(source_id) or node_colors.get(target_id) or color_scheme.default_edge_color
             digraph.edge(
                 f"{dot_node_names[source_id]}:out_{tail_port_index}:{EDGE_TAIL_SIDE}",
                 f"{dot_node_names[target_id]}:in_{head_port_index}:{EDGE_HEAD_SIDE}",
