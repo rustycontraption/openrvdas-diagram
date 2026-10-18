@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 
-from openrvdas_diagram.color_schemes import CLASSIC
+from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
 
 # TODO: Figure out how to handle loggers that connect to each other
 # TODO: Figure out how to show logger writers that go to a deadend
@@ -191,7 +191,7 @@ class GraphmlBuilder:
         shape_node = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}ShapeNode")
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}Geometry", {"width": str(estimate_node_width(label)), "height": str(NODE_HEIGHT_PX)})
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}Shape", {"type": shape})
-        ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}BorderStyle", {"type": "line", "width": "1.0", "color": CLASSIC.default_node_border_color})
+        ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}BorderStyle", {"type": "line", "width": "1.0", "color": CLASSIC_LIGHT.default_node_border_color})
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}NodeLabel", {"autoSizePolicy": "content"}).text = label
 
     @staticmethod
@@ -236,7 +236,7 @@ class GraphmlBuilder:
         group_index = 0
 
         sources_group_label = "sources"
-        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, CLASSIC.group_fill_color(group_index))
+        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, CLASSIC_LIGHT.group_fill_color(group_index))
         group_index += 1
         for source_name in self.nodes["sources"]:
             self._generate_node_xml(
@@ -249,13 +249,13 @@ class GraphmlBuilder:
             )
 
         for yaml_file, logger_definitions in self.nodes["loggers"].items():
-            loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, CLASSIC.group_fill_color(group_index))
+            loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, CLASSIC_LIGHT.group_fill_color(group_index))
             group_index += 1
             for logger_name in logger_definitions:
                 self._generate_node_xml(loggers_graph, self._logger_node_id(yaml_file, logger_name), logger_name, "roundrectangle", "logger", yaml_file)
 
         destinations_group_label = "destinations"
-        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, CLASSIC.group_fill_color(group_index))
+        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, CLASSIC_LIGHT.group_fill_color(group_index))
         group_index += 1
         for destination_value in self.nodes["destinations"]:
             self._generate_node_xml(destinations_graph, self._destination_node_id(destination_value), destination_value, "roundrectangle", "destination", destinations_group_label)

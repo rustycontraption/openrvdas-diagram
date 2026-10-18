@@ -1,14 +1,15 @@
 """
 Color schemes for the rendered diagram.
 
-A scheme has one pool of colors plus a few fixed colors.  
+A scheme is a list of colors plus a few fixed colors. Each scheme comes in a
+light and a dark version, with colors chosen to show up on that background.
 
-Colors are picked from the pool by golden-ratio stepping, so items next to each 
-other get clearly different colors. Groups mix their picked color towards the background
+Nodes step through the list (see pick_color), so nodes next to each other get
+clearly different colors. Groups mix their picked color towards the background
 color.
 """
 
-import colorsys
+import math
 from dataclasses import dataclass
 
 GOLDEN_RATIO_CONJUGATE = 0.618033988749895
@@ -17,11 +18,26 @@ GROUP_FILL_BACKGROUND_MIX = 0.8
 # Graphviz draws on white when a scheme sets no background
 DEFAULT_BACKGROUND_COLOR = "#FFFFFF"
 
-# Evenly spaced samples of matplotlib's viridis colormap, from 0.0 to 1.0
-VIRIDIS_STOPS = (
-    "#440154", "#482475", "#414487", "#355F8D", "#2A788E", "#21918C",
-    "#22A884", "#44BF70", "#7AD151", "#BDDF26", "#FDE725",
+# Seven evenly spaced hues around the color wheel, dark enough to show up on white
+CLASSIC_LIGHT_COLORS = (
+    "#BD0F0F", "#BDA40F", "#41BD0F", "#0FBD72", "#0F72BD", "#410FBD", "#BD0FA4",
 )
+# The same seven hues, light enough to show up on a dark background
+CLASSIC_DARK_COLORS = (
+    "#ED5E5E", "#EDD95E", "#87ED5E", "#5EEDB0", "#5EB0ED", "#875EED", "#ED5ED9",
+)
+# Seven samples of matplotlib's viridis colormap from dark purple to green,
+# leaving out the pale yellow end that is hard to see on white
+VIRIDIS_LIGHT_COLORS = (
+    "#440154", "#45337D", "#365D8C", "#27818D", "#22A485", "#53C468", "#7AD151",
+)
+# Seven samples of viridis from blue to yellow, leaving out the near-black
+# purple end that is hard to see on a dark background
+VIRIDIS_DARK_COLORS = (
+    "#414487", "#306A8D", "#228F8C", "#2EB07D", "#70CE57", "#CEE126", "#FDE725",
+)
+
+DARK_BACKGROUND_COLOR = "#1E1E1E"
 
 
 def hex_to_rgb(hex_color):
@@ -42,43 +58,22 @@ def mix_colors(color, other_color, amount):
     ))
 
 
-@dataclass(frozen=True)
-class HueWheelPool:
-    """Every hue at one lightness and saturation; position 0.0 and 1.0 are both red."""
-
-    lightness: float
-    saturation: float
-
-    def color_at_position(self, position):
-        red, green, blue = colorsys.hls_to_rgb(position, self.lightness, self.saturation)
-        return rgb_to_hex(red * 255, green * 255, blue * 255)
-
-
-@dataclass(frozen=True)
-class StopsPool:
-    """The colors along a list of hex stops, blended evenly from the first stop (0.0) to the last (1.0)."""
-
-    stops: tuple
-
-    def color_at_position(self, position):
-        scaled_position = min(max(position, 0.0), 1.0) * (len(self.stops) - 1)
-        lower_stop_index = min(int(scaled_position), len(self.stops) - 2)
-        return mix_colors(
-            self.stops[lower_stop_index],
-            self.stops[lower_stop_index + 1],
-            scaled_position - lower_stop_index,
-        )
-
-
-def pick_color(color_pool, index):
+def color_step(color_count):
     """
-    Returns the color for item `index` from a pool.
+    How many places to move through a list of `color_count` colors for each node.
 
-    Each item steps the golden ratio conjugate further along the pool, so
-    consecutive items land far apart and every item keeps its color however many
-    items there are.
+    About 0.618 of the list (the golden ratio), so consecutive nodes land far
+    apart, and sharing no factor with `color_count`, so every color is used once
+    before any repeats.
     """
-    return color_pool.color_at_position((index * GOLDEN_RATIO_CONJUGATE) % 1.0)
+    target_step = round(color_count * GOLDEN_RATIO_CONJUGATE)
+    steps_nearest_first = sorted(range(1, color_count + 1), key=lambda step: abs(step - target_step))
+    return next(step for step in steps_nearest_first if math.gcd(step, color_count) == 1)
+
+
+def pick_color(colors, index):
+    """Returns the color for item `index`, stepping through `colors` so neighboring items differ."""
+    return colors[(index * color_step(len(colors))) % len(colors)]
 
 
 @dataclass(frozen=True)
@@ -86,7 +81,7 @@ class ColorScheme:
     """
     The colors of a diagram.
 
-    color_pool                  the pool node, edge and group box colors are picked from
+    colors                      the list node, edge and group box colors are picked from
     node_fill_color             fills node boxes
     default_node_border_color   outlines nodes that have no color of their own
     default_edge_color          colors edges that have no color of their own
@@ -95,7 +90,7 @@ class ColorScheme:
     """
 
     name: str
-    color_pool: object
+    colors: tuple
     node_fill_color: str
     default_node_border_color: str
     default_edge_color: str
@@ -104,34 +99,57 @@ class ColorScheme:
 
     def node_color(self, node_index):
         """
-        Picks a node's color from the pool.
+        Picks a node's color from the list.
         """
-        return pick_color(self.color_pool, node_index)
+        return pick_color(self.colors, node_index)
 
     def group_fill_color(self, group_index):
         background_color = self.background_color or DEFAULT_BACKGROUND_COLOR
-        return mix_colors(pick_color(self.color_pool, group_index), background_color, GROUP_FILL_BACKGROUND_MIX)
+        return mix_colors(pick_color(self.colors, group_index), background_color, GROUP_FILL_BACKGROUND_MIX)
 
 
-CLASSIC = ColorScheme(
-    name="classic",
-    color_pool=HueWheelPool(lightness=0.40, saturation=0.85),
+CLASSIC_LIGHT = ColorScheme(
+    name="classic-light",
+    colors=CLASSIC_LIGHT_COLORS,
     node_fill_color="#FFFFFF",
     default_node_border_color="#000000",
     default_edge_color="#555555",
 )
 
-VIRIDIS = ColorScheme(
-    name="viridis",
-    color_pool=StopsPool(VIRIDIS_STOPS),
+CLASSIC_DARK = ColorScheme(
+    name="classic-dark",
+    colors=CLASSIC_DARK_COLORS,
+    node_fill_color="#2B2B2B",
+    default_node_border_color="#BBBBBB",
+    default_edge_color="#9A9A9A",
+    text_color="#E6E6E6",
+    background_color=DARK_BACKGROUND_COLOR,
+)
+
+VIRIDIS_LIGHT = ColorScheme(
+    name="viridis-light",
+    colors=VIRIDIS_LIGHT_COLORS,
     node_fill_color="#FFFFFF",
     default_node_border_color="#333333",
     default_edge_color="#666666",
     text_color="#1A1A1A",
 )
 
-COLOR_SCHEMES = {color_scheme.name: color_scheme for color_scheme in (CLASSIC, VIRIDIS)}
-DEFAULT_COLOR_SCHEME_NAME = CLASSIC.name
+VIRIDIS_DARK = ColorScheme(
+    name="viridis-dark",
+    colors=VIRIDIS_DARK_COLORS,
+    node_fill_color="#2B2B2B",
+    default_node_border_color="#BBBBBB",
+    default_edge_color="#9A9A9A",
+    text_color="#E6E6E6",
+    background_color=DARK_BACKGROUND_COLOR,
+)
+
+COLOR_SCHEMES = {
+    color_scheme.name: color_scheme
+    for color_scheme in (CLASSIC_LIGHT, CLASSIC_DARK, VIRIDIS_LIGHT, VIRIDIS_DARK)
+}
+DEFAULT_COLOR_SCHEME_NAME = CLASSIC_LIGHT.name
 
 
 def get_color_scheme(name):

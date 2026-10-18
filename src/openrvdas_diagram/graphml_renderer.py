@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import graphviz
 
-from openrvdas_diagram.color_schemes import CLASSIC
+from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
 from openrvdas_diagram.graphml_builder import GRAPHML_NAMESPACE
 
 '''
@@ -46,7 +46,7 @@ class GraphmlRenderer:
     """Renders the generic GraphML written by GraphmlBuilder as a PNG, laid out
     in layers with Graphviz dot, in the colors of color_scheme."""
 
-    def __init__(self, graphml_text, color_scheme=CLASSIC):
+    def __init__(self, graphml_text, color_scheme=CLASSIC_LIGHT):
         self.root = ET.fromstring(graphml_text)
         self.color_scheme = color_scheme
 
