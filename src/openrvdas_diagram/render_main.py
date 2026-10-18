@@ -4,10 +4,11 @@ from pathlib import Path
 
 import graphviz
 
+from openrvdas_diagram.color_schemes import COLOR_SCHEMES, DEFAULT_COLOR_SCHEME_NAME, get_color_scheme
 from openrvdas_diagram.graphml_renderer import GraphmlRenderer
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "graphml_file", help="Generic-format GraphML file written by openrvdas-diagram --graphml-format generic"
@@ -15,7 +16,13 @@ def parse_args():
     parser.add_argument(
         "--output", help="Where to write the PNG. Default is the GraphML file name with a .png extension"
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--color-scheme",
+        choices=tuple(COLOR_SCHEMES),
+        default=DEFAULT_COLOR_SCHEME_NAME,
+        help=f"Colors for the diagram. Default is {DEFAULT_COLOR_SCHEME_NAME}",
+    )
+    return parser.parse_args(argv)
 
 
 def main():
@@ -24,7 +31,8 @@ def main():
     out_path = Path(args.output) if args.output else graphml_path.with_suffix(".png")
 
     try:
-        png_bytes = GraphmlRenderer(graphml_path.read_text()).to_png()
+        renderer = GraphmlRenderer(graphml_path.read_text(), color_scheme=get_color_scheme(args.color_scheme))
+        png_bytes = renderer.to_png()
     except ValueError as error:
         sys.exit(f"could not read {graphml_path}: {error}")
     except graphviz.ExecutableNotFound:
