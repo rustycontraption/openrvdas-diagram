@@ -15,7 +15,7 @@ from dataclasses import dataclass
 GOLDEN_RATIO_CONJUGATE = 0.618033988749895
 # How far a group box fill is mixed from its picked color toward the background
 GROUP_FILL_BACKGROUND_MIX = 0.8
-# Graphviz draws on white when a scheme sets no background
+# The background of PNG output when a scheme sets none
 DEFAULT_BACKGROUND_COLOR = "#FFFFFF"
 
 # Seven evenly spaced hues around the color wheel, dark enough to show up on white
@@ -86,7 +86,7 @@ class ColorScheme:
     default_node_border_color   outlines nodes that have no color of their own
     default_edge_color          colors edges that have no color of their own
     text_color                  colors labels; None keeps the Graphviz default
-    background_color            fills the background; None keeps the Graphviz default
+    background_color            fills the background of PNG output (white if None); DOT/SVG output has no background
     """
 
     name: str

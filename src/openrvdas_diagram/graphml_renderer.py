@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import graphviz
 
-from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
+from openrvdas_diagram.color_schemes import CLASSIC_LIGHT, DEFAULT_BACKGROUND_COLOR
 from openrvdas_diagram.graphml_builder import GRAPHML_NAMESPACE
 
 '''
@@ -40,6 +40,9 @@ EDGE_TAIL_SIDE = "e"
 EDGE_HEAD_SIDE = "w"
 
 COLORED_NODE_BORDER_WIDTH = "3"
+# DOT output is drawn as SVG on whatever page shows it, so it has no background of its own;
+# Graphviz would otherwise paint a white rectangle behind it
+TRANSPARENT_BACKGROUND = "transparent"
 
 
 class GraphmlRenderer:
@@ -163,7 +166,7 @@ class GraphmlRenderer:
             f'</TR></TABLE>>'
         )
 
-    def _build_digraph(self, node_order):
+    def _build_digraph(self, node_order, background_color):
         dot_node_names = self._dot_node_names()
         node_colors = self._node_colors()
         edge_port_indexes = self._edge_port_indexes(node_order)
@@ -180,14 +183,13 @@ class GraphmlRenderer:
             "nodesep": NODE_SEPARATION_INCHES,
             "splines": EDGE_ROUTING,
             "fontname": FONT_NAME,
+            "bgcolor": background_color,
         }
         node_attributes = {"shape": NODE_SHAPE, "fontname": FONT_NAME}
-        # Left unset when the scheme has no preference, so Graphviz uses its defaults
+        # Left unset when the scheme has no preference, so Graphviz uses its default
         if color_scheme.text_color:
             graph_attributes["fontcolor"] = color_scheme.text_color
             node_attributes["fontcolor"] = color_scheme.text_color
-        if color_scheme.background_color:
-            graph_attributes["bgcolor"] = color_scheme.background_color
 
         digraph = graphviz.Digraph(
             graph_attr=graph_attributes,
@@ -234,7 +236,8 @@ class GraphmlRenderer:
         Ports can only be handed out in a crossing-free order once the node
         positions are known, so the layout is run once to measure and once to draw.
         """
-        layout = json.loads(self._build_digraph(self._declared_node_order()).pipe(format="json"))
+        layout_digraph = self._build_digraph(self._declared_node_order(), TRANSPARENT_BACKGROUND)
+        layout = json.loads(layout_digraph.pipe(format="json"))
         vertical_positions = {
             layout_object["name"]: float(layout_object["pos"].split(",")[1])
             for layout_object in layout.get("objects", [])
@@ -245,9 +248,14 @@ class GraphmlRenderer:
         return {node["id"]: -vertical_positions[dot_node_names[node["id"]]] for node in self.nodes}
 
     def to_dot(self):
-        """DOT source with ports in declared node order, which needs no Graphviz
-        install.  to_png refines the port order from the measured layout."""
-        return self._build_digraph(self._declared_node_order()).source
+        """DOT source with ports in declared node order and a transparent background,
+        which needs no Graphviz install.  to_png refines the port order from the
+        measured layout."""
+        return self._build_digraph(self._declared_node_order(), TRANSPARENT_BACKGROUND).source
+
+    def _png_background_color(self):
+        return self.color_scheme.background_color or DEFAULT_BACKGROUND_COLOR
 
     def to_png(self):
-        return self._build_digraph(self._laid_out_node_order()).pipe(format="png")
+        """A PNG drawn on the color scheme's background, white if the scheme has none."""
+        return self._build_digraph(self._laid_out_node_order(), self._png_background_color()).pipe(format="png")

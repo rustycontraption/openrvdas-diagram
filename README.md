@@ -60,7 +60,8 @@ This writes `data-flow-generated.png`. Use `--output` to choose a different file
 | `viridis-light` | White | 7 colors from the [viridis](https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html) colormap, dark purple to green |
 | `viridis-dark` | Charcoal (`#1E1E1E`) | 7 colors from viridis, blue to yellow |
 
-Each light and dark version uses colors that show up on its background.
+Each light and dark version uses colors that show up on its background. The background is drawn into PNGs only;
+DOT output (`GraphmlRenderer.to_dot()`, e.g. for drawing an SVG on a web page) has a transparent background.
 
 Viridis stays distinguishable for people with color vision deficiencies.
 
