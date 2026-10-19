@@ -29,8 +29,11 @@ CLASSIC_DARK_COLORS = (
 # Seven samples of matplotlib's viridis colormap from dark purple to green,
 # leaving out the pale yellow end that is hard to see on white
 VIRIDIS_LIGHT_COLORS = (
-    "#440154", "#45337D", "#365D8C", "#27818D", "#22A485", "#53C468", "#7AD151",
+    "#440154", "#45337D", "#365D8C", "#27818D", "#22A485", "#53C468", "#ffcf20FF",
 )
+# VIRIDIS_LIGHT_COLORS = (
+#     "#440154","#3a5e8cFF", "#2f9aa0FF", "#53C468", "#ffcf20FF",
+# )
 # Seven samples of viridis from blue to yellow, leaving out the near-black
 # purple end that is hard to see on a dark background
 VIRIDIS_DARK_COLORS = (
