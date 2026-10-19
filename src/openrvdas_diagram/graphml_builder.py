@@ -2,12 +2,6 @@ import xml.etree.ElementTree as ET
 
 from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
 
-# TODO: Figure out how to handle loggers that connect to each other
-# TODO: Figure out how to show logger writers that go to a deadend
-# TODO: Figure out how to show logger FileWriters (maybe noted in the logger node?)
-# TODO: Color schemes are imported here only to support yEd output.  Maybe we should let
-#       yEd handle the coloring so we can move colors out of the builder?
-
 '''
 Assumptions:
     - Logger names == source name

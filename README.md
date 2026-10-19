@@ -101,3 +101,23 @@ my_scheme = ColorScheme(
 )
 png_bytes = GraphmlRenderer(graphml_text, color_scheme=my_scheme).to_png()
 ```
+
+## TODO
+
+### Diagram content
+* **Loggers that send to each other:** decide how to draw a logger whose writer feeds another logger's reader.
+  `GraphmlBuilder._loggers_are_linked` only compares two loggers at a time; it should handle any number of them.
+* **Writers that go nowhere:** decide how to show a logger writer whose output reaches no known destination.
+* **FileWriters:** decide how to show loggers that write to local files, perhaps as a note on the logger node.
+* **Unlisted OpenRVDAS writer classes:** `openrvdas_remote_writer_classes` and `openrvdas_local_writer_classes` in
+  `graphml_builder.py` only know the classes listed there. Add default handling for any other OpenRVDAS writer class.
+
+### Layout and colors
+* **Colors in the yEd output:** color schemes are imported into `graphml_builder.py` only to color the yEd output.
+  Consider leaving yEd output uncolored (yEd can apply its own styling) so all color code stays in the renderer.
+* **Measured DOT:** `GraphmlRenderer.to_dot()` gives each edge an attachment point in config order, while `to_png()`
+  first measures the layout and orders attachment points by position. Edges drawn from `to_dot()` can bend sharply
+  into nodes with many incoming edges. Consider a `to_dot(measure_layout=True)` option (also available from the CLI)
+  that returns the measured DOT; it needs Graphviz installed, like `to_png()`.
+* **Stable layout:** sources are kept in a set, so their order, and so the layout and colors, can change from run to
+  run with the same configs.
