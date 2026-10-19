@@ -29,8 +29,6 @@ NODE_LABEL_CHAR_WIDTH_PX = 8
 
 def estimate_node_width(label):
     """
-    Calculate correct node width based on the label.
-
     yEd doesn't grow a node to fit its label on its own.  The Geometry we emit
     is the only thing that gives the label room, so it has to be sized up front.
     """
@@ -38,7 +36,6 @@ def estimate_node_width(label):
 
 
 openrvdas_remote_writer_classes = {
-    #TODO: add default behavior to handle openrvdas classes that arent listed here
     "CachedDataWriter": "data_server",
     "DatabaseWriter": "host",
     "EmailWriter": "to",
@@ -62,7 +59,6 @@ openrvdas_remote_writer_classes = {
 }
 
 openrvdas_local_writer_classes = {
-    #TODO: add default behavior to handle openrvdas classes that arent listed here
     "FileWriter",
     "TextFileWriter",
     "LogfileWriter",
@@ -71,17 +67,8 @@ openrvdas_local_writer_classes = {
 }
 
 class GraphmlBuilder:
-    """Builds a GraphML data-flow diagram from the logger inventory returned by
-    LoggerInventoryBuilder.
-
-    graphml_format selects who the output is compatible with:
-        - "yed": styled nodes nested inside yEd group nodes.
-        - "generic": standard GraphML only.  Nodes are flat and unstyled, and
-          describe themselves with label, kind and group data attributes.
-
-    The yEd output always uses the classic colors; color schemes are chosen when
-    rendering generic GraphML with GraphmlRenderer.
-    """
+    """The yEd output always uses the classic colors; color schemes are chosen when
+    rendering generic GraphML with GraphmlRenderer."""
 
     def __init__(self, inventory, graphml_format=GRAPHML_FORMAT_YED):
         if graphml_format not in SUPPORTED_GRAPHML_FORMATS:
@@ -143,7 +130,6 @@ class GraphmlBuilder:
     def _loggers_are_linked(yaml_file_2, logger_1, logger_2):
         """True if a writer in logger_1 sends to logger_2's yaml file, on a port
         logger_2 also reads from."""
-        #TODO: handle N number of loggers instead of logger_1 and logger_2
         for writer in logger_1.writers:
             if writer.kwargs.get("destination") != yaml_file_2:
                 continue

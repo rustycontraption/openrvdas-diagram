@@ -1,9 +1,4 @@
 class UserInputError(Exception):
-    """A problem with the user's config or template files that the user can fix.
-
-    Each subclass has a stable code so callers can recognise it without parsing the message.
-    """
-
     code = "user_input_error"
 
     def __init__(self, message, details=None):

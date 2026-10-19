@@ -1,21 +1,8 @@
-"""
-Color schemes for the rendered diagram.
-
-A scheme is a list of colors plus a few fixed colors. Each scheme comes in a
-light and a dark version, with colors chosen to show up on that background.
-
-Nodes step through the list (see pick_color), so nodes next to each other get
-clearly different colors. Groups mix their picked color towards the background
-color.
-"""
-
 import math
 from dataclasses import dataclass
 
 GOLDEN_RATIO_CONJUGATE = 0.618033988749895
-# How far a group box fill is mixed from its picked color toward the background
 GROUP_FILL_BACKGROUND_MIX = 0.8
-# The background of PNG output when a scheme sets none
 DEFAULT_BACKGROUND_COLOR = "#FFFFFF"
 
 # Seven evenly spaced hues around the color wheel, dark enough to show up on white
@@ -31,9 +18,7 @@ CLASSIC_DARK_COLORS = (
 VIRIDIS_LIGHT_COLORS = (
     "#440154", "#45337D", "#365D8C", "#27818D", "#22A485", "#53C468", "#ffcf20FF",
 )
-# VIRIDIS_LIGHT_COLORS = (
-#     "#440154","#3a5e8cFF", "#2f9aa0FF", "#53C468", "#ffcf20FF",
-# )
+
 # Seven samples of viridis from blue to yellow, leaving out the near-black
 # purple end that is hard to see on a dark background
 VIRIDIS_DARK_COLORS = (
@@ -44,7 +29,6 @@ DARK_BACKGROUND_COLOR = "#1E1E1E"
 
 
 def hex_to_rgb(hex_color):
-    """Returns the red, green and blue channels of a #RRGGBB color as 0-255 integers."""
     hex_digits = hex_color.lstrip("#")
     return tuple(int(hex_digits[channel_start:channel_start + 2], 16) for channel_start in (0, 2, 4))
 
@@ -54,7 +38,6 @@ def rgb_to_hex(red, green, blue):
 
 
 def mix_colors(color, other_color, amount):
-    """Moves `color` toward `other_color`; amount 0.0 keeps `color`, 1.0 gives `other_color`."""
     return rgb_to_hex(*(
         channel + (other_channel - channel) * amount
         for channel, other_channel in zip(hex_to_rgb(color), hex_to_rgb(other_color))
@@ -63,8 +46,6 @@ def mix_colors(color, other_color, amount):
 
 def color_step(color_count):
     """
-    How many places to move through a list of `color_count` colors for each node.
-
     About 0.618 of the list (the golden ratio), so consecutive nodes land far
     apart, and sharing no factor with `color_count`, so every color is used once
     before any repeats.
@@ -75,23 +56,11 @@ def color_step(color_count):
 
 
 def pick_color(colors, index):
-    """Returns the color for item `index`, stepping through `colors` so neighboring items differ."""
     return colors[(index * color_step(len(colors))) % len(colors)]
 
 
 @dataclass(frozen=True)
 class ColorScheme:
-    """
-    The colors of a diagram.
-
-    colors                      the list node, edge and group box colors are picked from
-    node_fill_color             fills node boxes
-    default_node_border_color   outlines nodes that have no color of their own
-    default_edge_color          colors edges that have no color of their own
-    text_color                  colors labels; None keeps the Graphviz default
-    background_color            fills the background of PNG output (white if None); DOT/SVG output has no background
-    """
-
     name: str
     colors: tuple
     node_fill_color: str
@@ -101,9 +70,6 @@ class ColorScheme:
     background_color: str | None = None
 
     def node_color(self, node_index):
-        """
-        Picks a node's color from the list.
-        """
         return pick_color(self.colors, node_index)
 
     def group_fill_color(self, group_index):

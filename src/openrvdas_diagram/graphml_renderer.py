@@ -11,11 +11,9 @@ from openrvdas_diagram.graphml_builder import GRAPHML_NAMESPACE
 Assumptions:
     - The GraphML was written by GraphmlBuilder in the generic format
     - Nodes with the same group value belong in the same group box
-    - All colors come from the ColorScheme passed in (classic by default)
     - Groups are colored in the order they first appear, which matches the yEd output
     - An edge is identified by eye from its color, which it shares with the source it
       leaves or the destination it arrives at
-    - Every edge gets its own attachment point, spaced along the side of the node
 '''
 
 REQUIRED_NODE_DATA_KEYS = ("label", "kind", "group")
@@ -46,9 +44,6 @@ TRANSPARENT_BACKGROUND = "transparent"
 
 
 class GraphmlRenderer:
-    """Renders the generic GraphML written by GraphmlBuilder as a PNG, laid out
-    in layers with Graphviz dot, in the colors of color_scheme."""
-
     def __init__(self, graphml_text, color_scheme=CLASSIC_LIGHT):
         self.root = ET.fromstring(graphml_text)
         self.color_scheme = color_scheme
@@ -101,11 +96,7 @@ class GraphmlRenderer:
         return nodes_by_group
 
     def _dot_node_names(self):
-        """
-        Maps each GraphML node id to a name that is safe to use in DOT.
-
-        Our GraphML ids contain colons, which DOT reads as a node:port separator.
-        """
+        """Our GraphML ids contain colons, which DOT reads as a node:port separator."""
         return {node["id"]: f"node_{node_index}" for node_index, node in enumerate(self.nodes)}
 
     def _node_colors(self):
@@ -186,7 +177,6 @@ class GraphmlRenderer:
             "bgcolor": background_color,
         }
         node_attributes = {"shape": NODE_SHAPE, "fontname": FONT_NAME}
-        # Left unset when the scheme has no preference, so Graphviz uses its default
         if color_scheme.text_color:
             graph_attributes["fontcolor"] = color_scheme.text_color
             node_attributes["fontcolor"] = color_scheme.text_color
@@ -230,9 +220,6 @@ class GraphmlRenderer:
 
     def _laid_out_node_order(self):
         """
-        Asks Graphviz where it places each node, and returns the nodes ranked from
-        the top of the picture to the bottom.
-
         Ports can only be handed out in a crossing-free order once the node
         positions are known, so the layout is run once to measure and once to draw.
         """
@@ -257,5 +244,4 @@ class GraphmlRenderer:
         return self.color_scheme.background_color or DEFAULT_BACKGROUND_COLOR
 
     def to_png(self):
-        """A PNG drawn on the color scheme's background, white if the scheme has none."""
         return self._build_digraph(self._laid_out_node_order(), self._png_background_color()).pipe(format="png")
