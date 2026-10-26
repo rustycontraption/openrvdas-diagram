@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 
 from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
 
@@ -66,6 +67,22 @@ openrvdas_local_writer_classes = {
     "RecordScreenWriter",
 }
 
+
+@dataclass
+class Node:
+    node_id: str
+    label: str
+    kind: str  # "source", "logger" or "destination"
+    group_id: str
+    group_label: str
+
+
+@dataclass
+class Edge:
+    source_node_id: str
+    target_node_id: str
+
+
 class GraphmlBuilder:
     """The yEd output always uses the classic colors; color schemes are chosen when
     rendering generic GraphML with GraphmlRenderer."""
@@ -79,52 +96,80 @@ class GraphmlBuilder:
         self.inventory = inventory
         self.graphml_format = graphml_format
 
-        self.nodes = {
-            "sources": set(),
-            "loggers": {},
-            "destinations": {},
-        }
+        self.nodes = []
         self.edges = []
 
-        self._build_nodes()
-        self._build_edges()
+        self._build_nodes_and_edges()
 
-    def _build_nodes(self):
-        self.nodes["loggers"] = dict(self.inventory)
-        self.nodes["sources"] = {
+    def _build_nodes_and_edges(self):
+        self._add_source_nodes()
+        logger_node_ids_by_destination_value = self._add_logger_nodes()
+        self._add_destination_nodes(logger_node_ids_by_destination_value)
+
+    def _add_source_nodes(self):
+        source_names = dict.fromkeys(
             logger_name
             for logger_definitions in self.inventory.values()
             for logger_name in logger_definitions
-        }
+        )
+        for source_name in source_names:
+            self.nodes.append(Node(
+                node_id=self._source_node_id(source_name),
+                label=source_name,
+                kind="source",
+                group_id="group_sources",
+                group_label="sources",
+            ))
 
+    def _add_logger_nodes(self):
+        logger_node_ids_by_destination_value = {}
         for yaml_file, logger_definitions in self.inventory.items():
             for logger_name, logger in logger_definitions.items():
+                logger_node_id = self._logger_node_id(yaml_file, logger_name)
+                self.nodes.append(Node(
+                    node_id=logger_node_id,
+                    label=logger_name,
+                    kind="logger",
+                    group_id=f"group_loggers::{yaml_file}",
+                    group_label=yaml_file,
+                ))
+                self.edges.append(Edge(
+                    source_node_id=self._source_node_id(logger_name),
+                    target_node_id=logger_node_id,
+                ))
                 for writer in logger.writers:
-                    self._add_destination(yaml_file, logger_name, writer)
+                    destination_value = self._destination_value(writer)
+                    if destination_value is not None:
+                        logger_node_ids_by_destination_value.setdefault(destination_value, []).append(logger_node_id)
+        return logger_node_ids_by_destination_value
 
-    def _build_edges(self):
-        for yaml_file, logger_definitions in self.nodes["loggers"].items():
-            for logger_name in logger_definitions:
-                self.edges.append((self._source_node_id(logger_name), self._logger_node_id(yaml_file, logger_name)))
+    def _add_destination_nodes(self, logger_node_ids_by_destination_value):
+        for destination_value, logger_node_ids in logger_node_ids_by_destination_value.items():
+            destination_node_id = self._destination_node_id(destination_value)
+            self.nodes.append(Node(
+                node_id=destination_node_id,
+                label=destination_value,
+                kind="destination",
+                group_id="group_destinations",
+                group_label="destinations",
+            ))
+            for logger_node_id in logger_node_ids:
+                self.edges.append(Edge(
+                    source_node_id=logger_node_id,
+                    target_node_id=destination_node_id,
+                ))
 
-        for destination_value, logger_refs in self.nodes["destinations"].items():
-            for yaml_file, logger_name in logger_refs:
-                self.edges.append((self._logger_node_id(yaml_file, logger_name), self._destination_node_id(destination_value)))
-
-    def _add_destination(self, yaml_file, logger_name, writer):
+    @staticmethod
+    def _destination_value(writer):
         if writer.class_name in openrvdas_local_writer_classes:
-            return
+            return None
         destination_kwarg = openrvdas_remote_writer_classes.get(writer.class_name)
         if destination_kwarg is None:
-            self.nodes["destinations"].setdefault(writer.class_name, []).append((yaml_file, logger_name))
-            return
+            return writer.class_name
         for kwarg_name in destination_kwarg.split(" | "):
             if kwarg_name in writer.kwargs:
-                destination_value = writer.kwargs[kwarg_name]
-                self.nodes["destinations"].setdefault(destination_value, []).append(
-                    (yaml_file, logger_name)
-                )
-                return
+                return writer.kwargs[kwarg_name]
+        return None
 
     @staticmethod
     def _loggers_are_linked(yaml_file_2, logger_1, logger_2):
@@ -171,12 +216,12 @@ class GraphmlBuilder:
         ET.SubElement(node, "data", {"key": "kind"}).text = kind
         ET.SubElement(node, "data", {"key": "group"}).text = group_label
 
-    def _generate_node_xml(self, graph, node_id, label, shape, kind, group_label):
-        node = ET.SubElement(graph, "node", {"id": node_id})
+    def _generate_node_xml(self, graph, node):
+        node_element = ET.SubElement(graph, "node", {"id": node.node_id})
         if self._is_yed_format:
-            self._add_yed_node_graphics(node, label, shape)
+            self._add_yed_node_graphics(node_element, node.label, "roundrectangle")
         else:
-            self._add_generic_node_data(node, label, kind, group_label)
+            self._add_generic_node_data(node_element, node.label, node.kind, node.group_label)
 
     @staticmethod
     def _generate_yed_group_node_xml(graph, group_id, label, fill_color):
@@ -204,32 +249,14 @@ class GraphmlBuilder:
         return graph
 
     def _add_node_elements(self, graph):
-        group_index = 0
+        nodes_by_group_id = {}
+        for node in self.nodes:
+            nodes_by_group_id.setdefault(node.group_id, []).append(node)
 
-        sources_group_label = "sources"
-        sources_graph = self._generate_group_node_xml(graph, "group_sources", sources_group_label, CLASSIC_LIGHT.group_fill_color(group_index))
-        group_index += 1
-        for source_name in self.nodes["sources"]:
-            self._generate_node_xml(
-                sources_graph,
-                self._source_node_id(source_name),
-                source_name,
-                "roundrectangle",
-                "source",
-                sources_group_label,
-            )
-
-        for yaml_file, logger_definitions in self.nodes["loggers"].items():
-            loggers_graph = self._generate_group_node_xml(graph, f"group_loggers::{yaml_file}", yaml_file, CLASSIC_LIGHT.group_fill_color(group_index))
-            group_index += 1
-            for logger_name in logger_definitions:
-                self._generate_node_xml(loggers_graph, self._logger_node_id(yaml_file, logger_name), logger_name, "roundrectangle", "logger", yaml_file)
-
-        destinations_group_label = "destinations"
-        destinations_graph = self._generate_group_node_xml(graph, "group_destinations", destinations_group_label, CLASSIC_LIGHT.group_fill_color(group_index))
-        group_index += 1
-        for destination_value in self.nodes["destinations"]:
-            self._generate_node_xml(destinations_graph, self._destination_node_id(destination_value), destination_value, "roundrectangle", "destination", destinations_group_label)
+        for group_index, (group_id, group_nodes) in enumerate(nodes_by_group_id.items()):
+            group_graph = self._generate_group_node_xml(graph, group_id, group_nodes[0].group_label, CLASSIC_LIGHT.group_fill_color(group_index))
+            for node in group_nodes:
+                self._generate_node_xml(group_graph, node)
 
     @staticmethod
     def _add_yed_edge_graphics(edge):
@@ -238,10 +265,10 @@ class GraphmlBuilder:
         ET.SubElement(polyline_edge, f"{{{YFILES_NAMESPACE}}}Arrows", {"source": "none", "target": "standard"})
 
     def _add_edge_elements(self, graph):
-        for edge_index, (source_node_id, target_node_id) in enumerate(self.edges):
-            edge = ET.SubElement(graph, "edge", {"id": f"e{edge_index}", "source": source_node_id, "target": target_node_id})
+        for edge_index, edge in enumerate(self.edges):
+            edge_element = ET.SubElement(graph, "edge", {"id": f"e{edge_index}", "source": edge.source_node_id, "target": edge.target_node_id})
             if self._is_yed_format:
-                self._add_yed_edge_graphics(edge)
+                self._add_yed_edge_graphics(edge_element)
 
     def _add_key_elements(self, root):
         if self._is_yed_format:
