@@ -105,11 +105,11 @@ class GraphmlBuilder:
     def _build_edges(self):
         for yaml_file, logger_definitions in self.nodes["loggers"].items():
             for logger_name in logger_definitions:
-                self.edges.append((logger_name, (yaml_file, logger_name), "source_to_logger"))
+                self.edges.append((self._source_node_id(logger_name), self._logger_node_id(yaml_file, logger_name)))
 
         for destination_value, logger_refs in self.nodes["destinations"].items():
             for yaml_file, logger_name in logger_refs:
-                self.edges.append(((yaml_file, logger_name), destination_value, "logger_to_destination"))
+                self.edges.append((self._logger_node_id(yaml_file, logger_name), self._destination_node_id(destination_value)))
 
     def _add_destination(self, yaml_file, logger_name, writer):
         if writer.class_name in openrvdas_local_writer_classes:
@@ -151,15 +151,6 @@ class GraphmlBuilder:
     @staticmethod
     def _destination_node_id(destination_value):
         return f"destination::{destination_value}"
-
-    def _edge_endpoint_ids(self, from_id, to_id, kind):
-        if kind == "source_to_logger":
-            yaml_file, logger_name = to_id
-            return self._source_node_id(from_id), self._logger_node_id(yaml_file, logger_name)
-        if kind == "logger_to_destination":
-            yaml_file, logger_name = from_id
-            return self._logger_node_id(yaml_file, logger_name), self._destination_node_id(to_id)
-        raise ValueError(f"unknown edge kind: {kind!r}")
 
     @property
     def _is_yed_format(self):
@@ -246,18 +237,11 @@ class GraphmlBuilder:
         polyline_edge = ET.SubElement(data, f"{{{YFILES_NAMESPACE}}}PolyLineEdge")
         ET.SubElement(polyline_edge, f"{{{YFILES_NAMESPACE}}}Arrows", {"source": "none", "target": "standard"})
 
-    @staticmethod
-    def _add_generic_edge_data(edge, kind):
-        ET.SubElement(edge, "data", {"key": "edge_kind"}).text = kind
-
     def _add_edge_elements(self, graph):
-        for edge_index, (from_id, to_id, kind) in enumerate(self.edges):
-            source_id, target_id = self._edge_endpoint_ids(from_id, to_id, kind)
-            edge = ET.SubElement(graph, "edge", {"id": f"e{edge_index}", "source": source_id, "target": target_id})
+        for edge_index, (source_node_id, target_node_id) in enumerate(self.edges):
+            edge = ET.SubElement(graph, "edge", {"id": f"e{edge_index}", "source": source_node_id, "target": target_node_id})
             if self._is_yed_format:
                 self._add_yed_edge_graphics(edge)
-            else:
-                self._add_generic_edge_data(edge, kind)
 
     def _add_key_elements(self, root):
         if self._is_yed_format:
@@ -266,7 +250,6 @@ class GraphmlBuilder:
             return
         for node_attribute_name in ("label", "kind", "group"):
             ET.SubElement(root, "key", {"for": "node", "id": node_attribute_name, "attr.name": node_attribute_name, "attr.type": "string"})
-        ET.SubElement(root, "key", {"for": "edge", "id": "edge_kind", "attr.name": "kind", "attr.type": "string"})
 
     def _build_root_element(self):
         schema_location = YED_SCHEMA_LOCATION if self._is_yed_format else GENERIC_SCHEMA_LOCATION
