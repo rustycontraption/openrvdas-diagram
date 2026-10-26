@@ -172,20 +172,6 @@ class GraphmlBuilder:
         return None
 
     @staticmethod
-    def _loggers_are_linked(yaml_file_2, logger_1, logger_2):
-        """True if a writer in logger_1 sends to logger_2's yaml file, on a port
-        logger_2 also reads from."""
-        for writer in logger_1.writers:
-            if writer.kwargs.get("destination") != yaml_file_2:
-                continue
-            writer_port = writer.kwargs.get("port")
-            if writer_port is None:
-                continue
-            if any(reader.kwargs.get("port") == writer_port for reader in logger_2.readers):
-                return True
-        return False
-
-    @staticmethod
     def _source_node_id(source_name):
         return f"source::{source_name}"
 
