@@ -14,6 +14,8 @@ Assumptions:
     - Groups are colored in the order they first appear, which matches the yEd output
     - An edge is identified by eye from its color, which it shares with the source it
       leaves or the destination it arrives at
+    - Each node's type is written as its Graphviz class, so SVG readers can tell
+      sources, loggers and destinations apart
 '''
 
 REQUIRED_NODE_DATA_KEYS = ("label", "nodeType", "group")
@@ -206,6 +208,8 @@ class GraphmlRenderer:
                             node_colors[node["id"]] if is_colored else color_scheme.default_node_border_color,
                             COLORED_NODE_BORDER_WIDTH if is_colored else NODE_BORDER_WIDTH,
                         ),
+                        # "class" is a Python keyword, so it can't be passed as class=...
+                        **{"class": node["nodeType"]},
                     )
 
         for (source_id, target_id), (tail_port_index, head_port_index) in zip(self.edges, edge_port_indexes):
