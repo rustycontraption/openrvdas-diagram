@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from typing import Literal
 
 from openrvdas_diagram.color_schemes import CLASSIC_LIGHT
 
@@ -72,7 +73,7 @@ openrvdas_local_writer_classes = {
 class Node:
     node_id: str
     label: str
-    kind: str  # "source", "logger" or "destination"
+    kind: Literal["source", "logger", "destination"]
     group_id: str
     group_label: str
 
