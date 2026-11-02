@@ -18,9 +18,9 @@ Assumptions:
       sources, loggers and destinations apart
 '''
 
-REQUIRED_NODE_DATA_KEYS = ("label", "kind", "group")
+REQUIRED_NODE_DATA_KEYS = ("label", "nodeType", "group")
 # Loggers sit between a colored source and a colored destination, so stay neutral
-COLORED_NODE_KINDS = ("source", "destination")
+COLORED_NODE_TYPES = ("source", "destination")
 
 RANK_DIRECTION = "LR"
 RANK_SEPARATION_INCHES = "2.5"
@@ -102,7 +102,7 @@ class GraphmlRenderer:
         return {node["id"]: f"node_{node_index}" for node_index, node in enumerate(self.nodes)}
 
     def _node_colors(self):
-        colored_nodes = [node for node in self.nodes if node["kind"] in COLORED_NODE_KINDS]
+        colored_nodes = [node for node in self.nodes if node["nodeType"] in COLORED_NODE_TYPES]
         return {
             node["id"]: self.color_scheme.node_color(colored_node_index)
             for colored_node_index, node in enumerate(colored_nodes)
