@@ -73,7 +73,7 @@ openrvdas_local_writer_classes = {
 class Node:
     node_id: str
     label: str
-    kind: Literal["source", "logger", "destination"]
+    node_type: Literal["source", "logger", "destination"]
     group_id: str
     group_label: str
 
@@ -117,7 +117,7 @@ class GraphmlBuilder:
             self.nodes.append(Node(
                 node_id=self._source_node_id(source_name),
                 label=source_name,
-                kind="source",
+                node_type="source",
                 group_id="group_sources",
                 group_label="sources",
             ))
@@ -130,7 +130,7 @@ class GraphmlBuilder:
                 self.nodes.append(Node(
                     node_id=logger_node_id,
                     label=logger_name,
-                    kind="logger",
+                    node_type="logger",
                     group_id=f"group_loggers::{yaml_file}",
                     group_label=yaml_file,
                 ))
@@ -150,7 +150,7 @@ class GraphmlBuilder:
             self.nodes.append(Node(
                 node_id=destination_node_id,
                 label=destination_value,
-                kind="destination",
+                node_type="destination",
                 group_id="group_destinations",
                 group_label="destinations",
             ))
@@ -198,9 +198,9 @@ class GraphmlBuilder:
         ET.SubElement(shape_node, f"{{{YFILES_NAMESPACE}}}NodeLabel", {"autoSizePolicy": "content"}).text = label
 
     @staticmethod
-    def _add_generic_node_data(node, label, kind, group_label):
+    def _add_generic_node_data(node, label, node_type, group_label):
         ET.SubElement(node, "data", {"key": "label"}).text = label
-        ET.SubElement(node, "data", {"key": "kind"}).text = kind
+        ET.SubElement(node, "data", {"key": "nodeType"}).text = node_type
         ET.SubElement(node, "data", {"key": "group"}).text = group_label
 
     def _generate_node_xml(self, graph, node):
@@ -208,7 +208,7 @@ class GraphmlBuilder:
         if self._is_yed_format:
             self._add_yed_node_graphics(node_element, node.label, "roundrectangle")
         else:
-            self._add_generic_node_data(node_element, node.label, node.kind, node.group_label)
+            self._add_generic_node_data(node_element, node.label, node.node_type, node.group_label)
 
     @staticmethod
     def _generate_yed_group_node_xml(graph, group_id, label, fill_color):
@@ -262,7 +262,7 @@ class GraphmlBuilder:
             ET.SubElement(root, "key", {"for": "node", "id": "node_graphics", "yfiles.type": "nodegraphics"})
             ET.SubElement(root, "key", {"for": "edge", "id": "edge_graphics", "yfiles.type": "edgegraphics"})
             return
-        for node_attribute_name in ("label", "kind", "group"):
+        for node_attribute_name in ("label", "nodeType", "group"):
             ET.SubElement(root, "key", {"for": "node", "id": node_attribute_name, "attr.name": node_attribute_name, "attr.type": "string"})
 
     def _build_root_element(self):
