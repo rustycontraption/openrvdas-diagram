@@ -4,8 +4,11 @@ Generates a data-flow diagram from OpenRVDAS logger configuration files.
 
 ## Installation
 
+Pick a release from the [tags page](https://github.com/rustycontraption/openrvdas-diagram/tags) and put it in
+place of `<tag>`:
+
 ```bash
-pip install https://github.com/rustycontraption/openrvdas-diagram/archive/refs/tags/v0.2.1.tar.gz
+pip install https://github.com/rustycontraption/openrvdas-diagram/archive/refs/tags/<tag>.tar.gz
 ```
 
 This installs the `openrvdas-diagram` and `openrvdas-diagram-render` commands.
@@ -88,6 +91,15 @@ The commands then run from your working copy. Run the tests with:
 
 ```bash
 pytest
+```
+
+## Releasing
+
+The version comes from git tags, through [setuptools-scm](https://setuptools-scm.readthedocs.io/). To release, tag the commit and push the tag:
+
+```bash
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 ## TODO
